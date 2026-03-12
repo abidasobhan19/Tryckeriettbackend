@@ -1,6 +1,30 @@
 const crypto = require("crypto");
-const createCrudRouter = require("./createCrudRouter");
+const express = require("express");
 const { User } = require("../Models");
+
+const userRouter = express.Router();
+const USER_SEARCH_FIELDS = ["fullName", "email", "phoneNumber", "accountType"];
+const USER_POPULATE_FIELDS = ["client", "supplier"];
+
+function buildSearchQuery(searchFields, q) {
+  if (!q || !Array.isArray(searchFields) || searchFields.length === 0) {
+    return {};
+  }
+
+  return {
+    $or: searchFields.map((field) => ({
+      [field]: { $regex: q, $options: "i" },
+    })),
+  };
+}
+
+function populateQuery(query, populatePaths) {
+  let populatedQuery = query;
+  for (const path of populatePaths) {
+    populatedQuery = populatedQuery.populate(path);
+  }
+  return populatedQuery;
+}
 
 function normalizeAccountType(value) {
   const normalized = String(value || "")
@@ -65,11 +89,6 @@ function sanitizeUserDocument(userDoc) {
   delete user.passwordHash;
   return user;
 }
-
-const userRouter = createCrudRouter(User, {
-  searchFields: ["fullName", "email", "phoneNumber", "accountType"],
-  populate: ["client", "supplier"],
-});
 
 userRouter.post("/create-user", (req, res) => {
   const {
@@ -239,6 +258,73 @@ userRouter.patch("/:id/onboarding/welcome-email", (req, res) => {
     .catch((error) =>
       res.status(400).json({ message: "Failed to update onboarding settings", error: error.message })
     );
+});
+
+userRouter.get("/", (req, res) => {
+  const page = Math.max(parseInt(req.query.page || "1", 10), 1);
+  const limit = Math.min(Math.max(parseInt(req.query.limit || "20", 10), 1), 100);
+  const skip = (page - 1) * limit;
+  const searchQuery = buildSearchQuery(USER_SEARCH_FIELDS, req.query.q);
+  const query = populateQuery(User.find(searchQuery).sort("-createdAt").skip(skip).limit(limit), USER_POPULATE_FIELDS);
+
+  Promise.all([query.exec(), User.countDocuments(searchQuery).exec()])
+    .then(([items, total]) =>
+      res.json({
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        items,
+      })
+    )
+    .catch((error) => res.status(500).json({ message: "Failed to fetch records", error: error.message }));
+});
+
+userRouter.get("/:id", (req, res) => {
+  const query = populateQuery(User.findById(req.params.id), USER_POPULATE_FIELDS);
+
+  query
+    .exec()
+    .then((item) => {
+      if (!item) {
+        return res.status(404).json({ message: "Record not found" });
+      }
+      return res.json(item);
+    })
+    .catch((error) => res.status(500).json({ message: "Failed to fetch record", error: error.message }));
+});
+
+userRouter.post("/", (req, res) => {
+  User.create(req.body)
+    .then((created) => res.status(201).json(created))
+    .catch((error) => res.status(400).json({ message: "Failed to create record", error: error.message }));
+});
+
+userRouter.put("/:id", (req, res) => {
+  User.findByIdAndUpdate(req.params.id, req.body, {
+    new: true,
+    runValidators: true,
+  })
+    .exec()
+    .then((updated) => {
+      if (!updated) {
+        return res.status(404).json({ message: "Record not found" });
+      }
+      return res.json(updated);
+    })
+    .catch((error) => res.status(400).json({ message: "Failed to update record", error: error.message }));
+});
+
+userRouter.delete("/:id", (req, res) => {
+  User.findByIdAndDelete(req.params.id)
+    .exec()
+    .then((deleted) => {
+      if (!deleted) {
+        return res.status(404).json({ message: "Record not found" });
+      }
+      return res.json({ message: "Record deleted successfully" });
+    })
+    .catch((error) => res.status(500).json({ message: "Failed to delete record", error: error.message }));
 });
 
 module.exports = userRouter;
