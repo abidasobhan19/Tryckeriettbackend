@@ -2,11 +2,15 @@ const mongoose = require("mongoose");
 
 const orderItemSchema = new mongoose.Schema(
   {
-    product: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
+    product: { type: mongoose.Schema.Types.ObjectId, ref: "Product", default: null },
     supplier: { type: mongoose.Schema.Types.ObjectId, ref: "Supplier", default: null },
     quantity: { type: Number, required: true, min: 1 },
     unitPriceSek: { type: Number, required: true, min: 0 },
     totalPriceSek: { type: Number, required: true, min: 0 },
+    productName: { type: String, trim: true },
+    productNumber: { type: String, trim: true },
+    productImage: { type: String, trim: true },
+    productDetails: { type: String, trim: true }
   },
   { _id: false }
 );
@@ -37,7 +41,7 @@ const orderHistoryEventSchema = new mongoose.Schema(
 const orderSchema = new mongoose.Schema(
   {
     orderNumber: { type: String, required: true, unique: true, trim: true },
-    client: { type: mongoose.Schema.Types.ObjectId, ref: "Client", required: true },
+    client: { type: mongoose.Schema.Types.ObjectId, ref: "Client", default: null },
     items: { type: [orderItemSchema], required: true, default: [] },
     deliveryStatus: {
       type: String,

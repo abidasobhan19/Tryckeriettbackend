@@ -11,6 +11,7 @@ const clientRoutes = require("./Routes/clientRoutes");
 const orderRoutes = require("./Routes/orderRoutes");
 const inboxMessageRoutes = require("./Routes/inboxMessageRoutes");
 const categoryRoutes = require("./Routes/categoryRoutes");
+const dashboardRoutes = require("./Routes/dashboardRoutes");
 
 const app = express();
 
@@ -44,8 +45,8 @@ function buildMongoUri() {
   return `mongodb://${credentials}${host}:${port}/${dbName}${query}`;
 }
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "100mb" }));
+app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 app.use((req, res, next) => {
   const allowedOrigin = process.env.CORS_ORIGIN || "*";
   res.header("Access-Control-Allow-Origin", allowedOrigin);
@@ -73,6 +74,7 @@ app.use("/api/clients", clientRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/inbox", inboxMessageRoutes);
 app.use("/api/categories", categoryRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 app.use((req, res) => {
   res

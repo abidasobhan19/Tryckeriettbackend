@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const { Category } = require("../Models");
 
 const categoryRouter = express.Router();
+const categorySort = { sortOrder: 1, createdAt: 1, _id: 1 };
 
 function parseParentId(parentId) {
   if (parentId === undefined) {
@@ -51,7 +52,7 @@ async function hasAncestor(candidateParentId, categoryId) {
 categoryRouter.get("/parents", (req, res) => {
   Category.find({ parentId: null })
     .select("_id name")
-    .sort({ sortOrder: 1, name: 1 })
+    .sort(categorySort)
     .lean()
     .then((parents) => res.json(parents))
     .catch((error) =>
@@ -69,7 +70,7 @@ categoryRouter.get("/tree", async (req, res) => {
     if (q) {
       const searchQuery = buildSearchQuery(q);
       const [items, total] = await Promise.all([
-        Category.find(searchQuery).sort({ sortOrder: 1, name: 1 }).skip(skip).limit(limit).populate("parentId", "name").lean(),
+        Category.find(searchQuery).sort(categorySort).skip(skip).limit(limit).populate("parentId", "name").lean(),
         Category.countDocuments(searchQuery),
       ]);
 
@@ -90,14 +91,14 @@ categoryRouter.get("/tree", async (req, res) => {
     }
 
     const [parents, topLevelTotal, total] = await Promise.all([
-      Category.find({ parentId: null }).sort({ sortOrder: 1, name: 1 }).skip(skip).limit(limit).lean(),
+      Category.find({ parentId: null }).sort(categorySort).skip(skip).limit(limit).lean(),
       Category.countDocuments({ parentId: null }),
       Category.countDocuments({}),
     ]);
 
     const parentIds = parents.map((parent) => parent._id);
     const children = parentIds.length
-      ? await Category.find({ parentId: { $in: parentIds } }).sort({ sortOrder: 1, name: 1 }).lean()
+      ? await Category.find({ parentId: { $in: parentIds } }).sort(categorySort).lean()
       : [];
 
     const childrenByParentId = new Map();

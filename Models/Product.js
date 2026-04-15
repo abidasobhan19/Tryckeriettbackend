@@ -38,6 +38,15 @@ const minimumRuleSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const dimensionsSchema = new mongoose.Schema(
+  {
+    height: { type: String, trim: true },
+    width: { type: String, trim: true },
+    length: { type: String, trim: true },
+  },
+  { _id: false }
+);
+
 const productSchema = new mongoose.Schema(
   {
     productName: { type: String, required: true, trim: true },
@@ -55,6 +64,12 @@ const productSchema = new mongoose.Schema(
     },
     category: { type: String, trim: true, required: true },
     additionalInformation: { type: String, trim: true },
+    otherInformation: { type: String, trim: true },
+    countryOfOrigin: { type: String, trim: true },
+    weight: { type: Number, min: 0 },
+    dimensions: { type: dimensionsSchema, default: undefined },
+    materials: [{ type: String, trim: true }],
+    colors: [{ type: String, trim: true }],
     unit: { type: String, trim: true },
     minimumOrderQuantity: { type: Number, min: 0, default: 0 },
     description: { type: String, trim: true },

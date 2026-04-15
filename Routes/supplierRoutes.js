@@ -1,5 +1,5 @@
 const express = require("express");
-const { Supplier } = require("../Models");
+const { Supplier, Product } = require("../Models");
 
 const supplierRouter = express.Router();
 const SUPPLIER_SEARCH_FIELDS = ["companyName", "uniqueId", "email", "phoneNumber"];
@@ -14,6 +14,61 @@ function buildSearchQuery(searchFields, q) {
       [field]: { $regex: q, $options: "i" },
     })),
   };
+}
+
+function escapeRegex(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildSupplierProductCountQuery(supplier) {
+  const conditions = [];
+
+  if (supplier?._id) {
+    conditions.push({ supplier: supplier._id });
+  }
+
+  const companyName = String(supplier?.companyName || "").trim();
+  if (companyName) {
+    conditions.push({
+      supplierName: { $regex: `^${escapeRegex(companyName)}$`, $options: "i" },
+    });
+  }
+
+  if (conditions.length === 0) {
+    return null;
+  }
+
+  return conditions.length === 1 ? conditions[0] : { $or: conditions };
+}
+
+async function attachLiveProductCounts(suppliers) {
+  if (!Array.isArray(suppliers) || suppliers.length === 0) {
+    return suppliers;
+  }
+
+  const counts = await Promise.all(
+    suppliers.map(async (supplier) => {
+      const query = buildSupplierProductCountQuery(supplier);
+      if (!query) {
+        return 0;
+      }
+
+      return Product.countDocuments(query).exec();
+    })
+  );
+
+  return suppliers.map((supplier, index) => {
+    const supplierObject =
+      supplier && typeof supplier.toObject === "function" ? supplier.toObject() : { ...supplier };
+
+    return {
+      ...supplierObject,
+      stats: {
+        ...(supplierObject.stats || {}),
+        totalProducts: counts[index],
+      },
+    };
+  });
 }
 
 supplierRouter.get("/page/:pageNumber", (req, res) => {
@@ -36,13 +91,14 @@ supplierRouter.get("/page/:pageNumber", (req, res) => {
     Supplier.find(searchQuery).sort("-createdAt").skip(skip).limit(limit).exec(),
     Supplier.countDocuments(searchQuery).exec(),
   ])
-    .then(([items, total]) => {
+    .then(async ([items, total]) => {
+      const itemsWithCounts = await attachLiveProductCounts(items);
       res.json({
         page,
         limit,
         total,
         totalPages: Math.ceil(total / limit),
-        items,
+        items: itemsWithCounts,
       });
     })
     .catch((error) => res.status(500).json({ message: "Failed to fetch suppliers", error: error.message }));

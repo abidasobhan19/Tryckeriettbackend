@@ -25,7 +25,7 @@ const userSchema = new mongoose.Schema(
     },
     accountType: {
       type: String,
-      enum: ["regular", "internal", "admin"],
+      enum: ["regular", "internal", "admin", "superadmin"],
       default: "regular",
       required: true,
     },

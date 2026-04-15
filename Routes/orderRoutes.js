@@ -2,8 +2,24 @@ const express = require("express");
 const { Order } = require("../Models");
 
 const orderRouter = express.Router();
-const ORDER_SEARCH_FIELDS = ["orderNumber", "deliveryStatus", "trackingNumber"];
+const ORDER_SEARCH_FIELDS = [
+  "orderNumber",
+  "deliveryStatus",
+  "trackingNumber",
+  "settings.checkout.contactPerson",
+  "settings.checkout.companyName",
+  "settings.checkout.email",
+];
 const ORDER_POPULATE_FIELDS = ["client", "items.product", "items.supplier", "history.createdBy"];
+const VALID_DELIVERY_STATUSES = [
+  "pending",
+  "processing",
+  "packed",
+  "shipped",
+  "out_for_delivery",
+  "delivered",
+  "cancelled",
+];
 
 function buildSearchQuery(searchFields, q) {
   if (!q || !Array.isArray(searchFields) || searchFields.length === 0) {
@@ -24,6 +40,31 @@ function populateQuery(query, populatePaths) {
   }
   return populatedQuery;
 }
+
+orderRouter.get("/summary", (req, res) => {
+  Promise.all([
+    Order.countDocuments({}).exec(),
+    Order.countDocuments({ deliveryStatus: "pending" }).exec(),
+    Order.countDocuments({ deliveryStatus: "delivered" }).exec(),
+    Order.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalRevenueSek: { $sum: "$totalAmountSek" },
+        },
+      },
+    ]),
+  ])
+    .then(([totalOrders, pendingOrders, completedOrders, revenueRows]) =>
+      res.json({
+        totalOrders,
+        pendingOrders,
+        completedOrders,
+        totalRevenueSek: revenueRows[0]?.totalRevenueSek || 0,
+      })
+    )
+    .catch((error) => res.status(500).json({ message: "Failed to fetch order summary", error: error.message }));
+});
 
 orderRouter.patch("/:id/delivery-status", (req, res) => {
   const { deliveryStatus, note, createdBy } = req.body;
@@ -90,7 +131,16 @@ orderRouter.get("/", (req, res) => {
   const page = Math.max(parseInt(req.query.page || "1", 10), 1);
   const limit = Math.min(Math.max(parseInt(req.query.limit || "20", 10), 1), 100);
   const skip = (page - 1) * limit;
+  const deliveryStatus = String(req.query.deliveryStatus || "").trim();
   const searchQuery = buildSearchQuery(ORDER_SEARCH_FIELDS, req.query.q);
+
+  if (deliveryStatus) {
+    if (!VALID_DELIVERY_STATUSES.includes(deliveryStatus)) {
+      return res.status(400).json({ message: "Invalid deliveryStatus" });
+    }
+    searchQuery.deliveryStatus = deliveryStatus;
+  }
+
   const query = populateQuery(Order.find(searchQuery).sort("-createdAt").skip(skip).limit(limit), ORDER_POPULATE_FIELDS);
 
   Promise.all([query.exec(), Order.countDocuments(searchQuery).exec()])
